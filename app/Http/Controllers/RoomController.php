@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Room;
+use App\Models\Guest;
 use Illuminate\Http\Request;
 
 class RoomController extends Controller
@@ -59,5 +60,59 @@ class RoomController extends Controller
     {
         $room->delete();
         return response()->json(['message' => 'Room deleted successfully']);
+    }
+
+    // POST /api/check-in
+    public function checkIn(Request $request)
+    {
+        $validated = $request->validate([
+            'room_number'  => 'required|string',
+            'guest_name'   => 'required|string',
+            'phone'        => 'required|string',
+            'nic_passport' => 'required|string',
+            'nationality'  => 'nullable|string',
+            'advance_paid' => 'nullable|numeric',
+        ]);
+
+        $room = Room::where('number', $validated['room_number'])->firstOrFail();
+        $room->update([
+            'status' => 'Occupied',
+            'guest'  => $validated['guest_name'],
+        ]);
+
+        // Automatically register or update guest in CRM database
+        Guest::updateOrCreate(
+            ['phone' => $validated['phone']],
+            [
+                'name'           => $validated['guest_name'],
+                'nic_passport'   => $validated['nic_passport'],
+                'country'        => $validated['nationality'] ?? 'Sri Lanka',
+                'preferred_room' => $room->type,
+            ]
+        );
+
+        return response()->json([
+            'message' => 'Check-in successful',
+            'room'    => $room
+        ]);
+    }
+
+    // POST /api/check-out
+    public function checkOut(Request $request)
+    {
+        $validated = $request->validate([
+            'room_number' => 'required|string',
+        ]);
+
+        $room = Room::where('number', $validated['room_number'])->firstOrFail();
+        $room->update([
+            'status' => 'Cleaning',
+            'guest'  => null,
+        ]);
+
+        return response()->json([
+            'message' => 'Check-out successful. Room marked for housekeeping.',
+            'room'    => $room
+        ]);
     }
 }
